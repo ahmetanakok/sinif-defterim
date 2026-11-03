@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sınıf Defterim & Ders Takip (Supabase Destekli)</title>
+    <title>Sınıf Defterim & Yıllık Plan Yükleme</title>
     <!-- Supabase Kütüphanesi -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Word (.docx) Dosyalarını Okumak İçin Mammoth.js Kütüphanesi -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <style>
         :root {
             --primary: #4f46e5;
@@ -17,6 +19,7 @@
             --border: #e2e8f0;
             --success: #10b981;
             --danger: #ef4444;
+            --warning: #f59e0b;
         }
 
         [data-theme="dark"] {
@@ -29,6 +32,7 @@
             --border: #334155;
             --success: #34d399;
             --danger: #f87171;
+            --warning: #fbbf24;
         }
 
         * {
@@ -46,7 +50,7 @@
         }
 
         .container {
-            max-width: 900px;
+            max-width: 950px;
             margin: 0 auto;
         }
 
@@ -102,6 +106,7 @@
             margin-bottom: 20px;
             border-bottom: 1px solid var(--border);
             padding-bottom: 10px;
+            flex-wrap: wrap;
         }
 
         .tab-btn {
@@ -166,6 +171,12 @@
             gap: 12px;
         }
 
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -207,8 +218,8 @@
             opacity: 0.9;
         }
 
-        @media (max-width: 600px) {
-            .grid-2 {
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 {
                 grid-template-columns: 1fr;
             }
             header {
@@ -231,12 +242,12 @@
         </header>
 
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('daily', event)">Günlük Görünüm</button>
-            <button class="tab-btn" onclick="switchTab('schedule', event)">Ders Programı</button>
-            <button class="tab-btn" onclick="switchTab('planner', event)">Yıllık Planlar (41 Hafta)</button>
+            <button class="tab-btn active" onclick="switchTab('daily', event)">Günlük Görünüm (Defter)</button>
+            <button class="tab-btn" onclick="switchTab('schedule', event)">Zamanlama ve Ders Programı</button>
+            <button class="tab-btn" onclick="switchTab('planner', event)">Yıllık Planlar (Word Yükle)</button>
         </div>
 
-        <!-- GÜNLÜK GÖRÜNÜM -->
+        <!-- GÜNLÜK GÖRÜNÜM (DEFTER YAZIMI İÇİN) -->
         <div id="daily" class="tab-content active">
             <div class="card">
                 <div class="grid-2">
@@ -258,57 +269,81 @@
             </div>
 
             <div class="card">
-                <h3>Günün Dersleri ve Kazanımlar</h3>
+                <h3>Günün Dersleri ve Öğrenme Çıktıları</h3>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    Aşağıdaki öğrenme çıktılarını / kazanımları okul defterinize kalemle rahatça geçirebilirsiniz:
+                </p>
                 <div id="dailyLessonsList">
                     <p style="color: var(--text-secondary); padding: 10px 0;">Yükleniyor...</p>
                 </div>
             </div>
         </div>
 
-        <!-- DERS PROGRAMI -->
+        <!-- DERS PROGRAMI VE ZAMANLAMA -->
         <div id="schedule" class="tab-content">
             <div class="card">
-                <h3>Yeni Ders Ekle</h3>
-                <form id="scheduleForm" onsubmit="addScheduleItem(event)">
-                    <div class="grid-2">
-                        <div class="form-group">
-                            <label>Gün</label>
-                            <select id="schDay">
-                                <option value="Pazartesi">Pazartesi</option>
-                                <option value="Salı">Salı</option>
-                                <option value="Çarşamba">Çarşamba</option>
-                                <option value="Perşembe">Perşembe</option>
-                                <option value="Cuma">Cuma</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Ders Saati</label>
-                            <input type="time" id="schTime" required>
-                        </div>
+                <h3>Okul Zamanlama Ayarları</h3>
+                <div class="grid-3">
+                    <div class="form-group">
+                        <label>Günlük Ders Sayısı</label>
+                        <input type="number" id="totalLessonsCount" value="7" min="1" max="10" onchange="generateTimeTableSlots()">
                     </div>
-                    <div class="grid-2">
-                        <div class="form-group">
-                            <label>Ders Adı</label>
-                            <input type="text" id="schSubject" placeholder="Örn: Matematik" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Sınıf / Şube</label>
-                            <input type="text" id="schClass" placeholder="Örn: 9/A" required>
-                        </div>
+                    <div class="form-group">
+                        <label>İlk Ders Başlangıç Saati</label>
+                        <input type="time" id="firstLessonStart" value="08:30" onchange="generateTimeTableSlots()">
                     </div>
-                    <button type="submit">Ders Programına Ekle</button>
-                </form>
+                    <div class="form-group">
+                        <label>Ders Süresi (Dakika)</label>
+                        <input type="number" id="lessonDuration" value="40" min="10" max="60" onchange="generateTimeTableSlots()">
+                    </div>
+                </div>
+                <div class="grid-3">
+                    <div class="form-group">
+                        <label>Normal Teneffüs Süresi (dk)</label>
+                        <input type="number" id="breakDuration" value="10" min="0" max="30" onchange="generateTimeTableSlots()">
+                    </div>
+                    <div class="form-group">
+                        <label>Öğle Arası Hangi Dersten Sonra?</label>
+                        <select id="lunchAfterLesson" onchange="generateTimeTableSlots()">
+                            <option value="4">4. Dersten Sonra</option>
+                            <option value="3">3. Dersten Sonra</option>
+                            <option value="5">5. Dersten Sonra</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Öğle Arası Süresi (Dakika)</label>
+                        <input type="number" id="lunchDuration" value="45" min="15" max="90" onchange="generateTimeTableSlots()">
+                    </div>
+                </div>
             </div>
 
             <div class="card">
-                <h3>Kayıtlı Ders Programı</h3>
+                <h3>Günlük Dersleri Düzenle ve Kaydet</h3>
+                <div class="form-group">
+                    <label>İşlem Yapılacak Gün</label>
+                    <select id="configDay" onchange="updateConfigDayView()">
+                        <option value="Pazartesi">Pazartesi</option>
+                        <option value="Salı">Salı</option>
+                        <option value="Çarşamba">Çarşamba</option>
+                        <option value="Perşembe">Perşembe</option>
+                        <option value="Cuma">Cuma</option>
+                    </select>
+                </div>
+                <div id="timeSlotsContainer">
+                    <!-- Otomatik üretilen saat slotları -->
+                </div>
+                <button onclick="saveDaySchedule()" style="margin-top: 15px;">Bu Günün Programını Kaydet</button>
+            </div>
+
+            <div class="card">
+                <h3>Kayıtlı Tüm Ders Programı</h3>
                 <table id="scheduleTable">
                     <thead>
                         <tr>
                             <th>Gün</th>
-                            <th>Saat</th>
-                            <th>Ders</th>
-                            <th>Sınıf</th>
+                            <th>Ders Saati</th>
+                            <th>Ders Adı</th>
+                            <th>Sınıf / Şube</th>
                             <th>İşlem</th>
                         </tr>
                     </thead>
@@ -319,26 +354,43 @@
             </div>
         </div>
 
-        <!-- YILLIK PLANLAR -->
+        <!-- YILLIK PLANLAR (WORD DOSYASINDAN YÜKLEME) -->
         <div id="planner" class="tab-content">
+            <div class="card" style="border: 2px dashed var(--primary); background: var(--bg);">
+                <h3 style="color: var(--primary); margin-bottom: 8px;">📂 Word Dosyasından (.docx) Yıllık Plan Yükle</h3>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">
+                    Yıllık plan Word dosyanızı buradan seçin. Sistem dosyadaki kazanım ve konuları otomatik olarak okuyup ilgili haftalara işleyecektir.
+                </p>
+                <div class="form-group">
+                    <label>Ders Adı</label>
+                    <input type="text" id="wordPlanSubject" placeholder="Örn: Matematik" required>
+                </div>
+                <div class="form-group">
+                    <label>Word Dosyası Seç (.docx)</label>
+                    <input type="file" id="wordFileInput" accept=".docx" style="padding: 8px; background: var(--card-bg);">
+                </div>
+                <!-- İSTEDİĞİNİZ YILLIK PLANLARI YÜKLE BUTONU -->
+                <button onclick="handleWordUpload()" style="width: 100%; padding: 12px; font-size: 1rem; margin-top: 5px;">Yıllık Planları Yükle</button>
+            </div>
+
             <div class="card">
-                <h3>Haftalık Öğrenme Çıktısı Ekle</h3>
+                <h3>Manuel Yıllık Plan Ekle</h3>
                 <form id="plannerForm" onsubmit="addPlanItem(event)">
                     <div class="grid-2">
                         <div class="form-group">
                             <label>Ders Adı</label>
-                            <input type="text" id="planSubject" placeholder="Örn: Matematik" required>
+                            <input type="text" id="planSubject" placeholder="Örn: Türkçe" required>
                         </div>
                         <div class="form-group">
-                            <label>Hafta (1-41)</label>
+                            <label>Hafta (1 - 41)</label>
                             <input type="number" id="planWeek" min="1" max="41" value="1" required>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Öğrenme Çıktısı / Konu</label>
-                        <textarea id="planOutcome" rows="3" placeholder="Bu haftanın kazanım veya öğrenme çıktısı..." required></textarea>
+                        <label>Öğrenme Çıktısı / Kazanım / Konu</label>
+                        <textarea id="planOutcome" rows="3" placeholder="Bu haftanın öğrenme çıktısı..." required></textarea>
                     </div>
-                    <button type="submit">Planı Kaydet</button>
+                    <button type="submit">Planı Tekli Kaydet</button>
                 </form>
             </div>
 
@@ -349,7 +401,7 @@
                         <tr>
                             <th>Ders</th>
                             <th>Hafta</th>
-                            <th>Kazanım / Konu</th>
+                            <th>Öğrenme Çıktısı / Konu</th>
                             <th>İşlem</th>
                         </tr>
                     </thead>
@@ -362,12 +414,9 @@
     </div>
 
     <script>
-        // ----------------------------------------------------
-        // BURAYA SUPABASE BİLGİLERİNİZİ GİRİN
-        // (Supabase projenizin Settings > API kısmından bulabilirsiniz)
-        // ----------------------------------------------------
-        const SUPABASE_URL = 'https://mwppaxqxpieyechdznbs.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_AEG2hynp0uvyNkJ1Lc3HOA_5MsEcUSm';
+        // SUPABASE BİLGİLERİNİZ (Kendi projenizin URL ve Anon Key bilgilerini buraya yazın)
+        const SUPABASE_URL = 'BURAYA_SUPABASE_URL_ADRESINIZI_YAZIN';
+        const SUPABASE_ANON_KEY = 'BURAYA_SUPABASE_ANON_KEY_DEGERINI_YAZIN';
 
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -388,52 +437,135 @@
         document.body.setAttribute('data-theme', savedTheme);
         document.getElementById('themeToggle').innerText = savedTheme === 'light' ? 'Karanlık Mod' : 'Aydınlık Mod';
 
-        // Sekme Yönetimi
         function switchTab(tabId, event) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
             if (event) event.currentTarget.classList.add('active');
             if (tabId === 'daily') renderDailyLessons();
+            if (tabId === 'schedule') generateTimeTableSlots();
         }
 
         // Verileri Supabase'den Çekme
         async function fetchData() {
             try {
-                // Dersleri Çek
                 const { data: schData, error: schError } = await supabaseClient.from('schedule').select('*');
                 if (!schError) schedule = schData || [];
 
-                // Planları Çek
                 const { data: planData, error: planError } = await supabaseClient.from('plans').select('*');
                 if (!planError) plans = planData || [];
 
                 renderScheduleTable();
                 renderPlanTable();
                 renderDailyLessons();
+                generateTimeTableSlots();
             } catch (err) {
                 console.error("Veri çekme hatası:", err);
             }
         }
 
-        // Program Ekleme
-        async function addScheduleItem(e) {
-            e.preventDefault();
-            const newItem = {
-                id: Date.now(),
-                day: document.getElementById('schDay').value,
-                time: document.getElementById('schTime').value,
-                subject: document.getElementById('schSubject').value,
-                cls: document.getElementById('schClass').value
-            };
+        // Saat Hesaplama ve Arayüz Oluşturma
+        function calculateTimes() {
+            const count = parseInt(document.getElementById('totalLessonsCount').value) || 7;
+            const startTimeStr = document.getElementById('firstLessonStart').value || "08:30";
+            const lessonDur = parseInt(document.getElementById('lessonDuration').value) || 40;
+            const breakDur = parseInt(document.getElementById('breakDuration').value) || 10;
+            const lunchAfter = parseInt(document.getElementById('lunchAfterLesson').value) || 4;
+            const lunchDur = parseInt(document.getElementById('lunchDuration').value) || 45;
 
-            const { error } = await supabaseClient.from('schedule').insert([newItem]);
-            if (error) {
-                alert("Kayıt eklenirken hata oluştu: " + error.message);
-                return;
+            let [h, m] = startTimeStr.split(':').map(Number);
+            let currentMinutes = h * 60 + m;
+
+            let slots = [];
+            for (let i = 1; i <= count; i++) {
+                let startH = Math.floor(currentMinutes / 60).toString().padStart(2, '0');
+                let startM = (currentMinutes % 60).toString().padStart(2, '0');
+                let startTime = `${startH}:${startM}`;
+
+                currentMinutes += lessonDur;
+
+                let endH = Math.floor(currentMinutes / 60).toString().padStart(2, '0');
+                let endM = (currentMinutes % 60).toString().padStart(2, '0');
+                let endTime = `${endH}:${endM}`;
+
+                slots.push({ lessonNo: i, time: `${startTime} - ${endTime}` });
+
+                if (i < count) {
+                    if (i === lunchAfter) {
+                        currentMinutes += lunchDur;
+                    } else {
+                        currentMinutes += breakDur;
+                    }
+                }
+            }
+            return slots;
+        }
+
+        function generateTimeTableSlots() {
+            const container = document.getElementById('timeSlotsContainer');
+            if (!container) return;
+            const slots = calculateTimes();
+            const currentDay = document.getElementById('configDay').value;
+            const dayExisting = schedule.filter(s => s.day === currentDay);
+
+            container.innerHTML = slots.map(slot => {
+                const existing = dayExisting.find(s => s.time === slot.time) || { subject: '', cls: '' };
+                return `
+                    <div class="grid-3" style="align-items: center; margin-bottom: 8px; background: var(--bg); padding: 8px; border-radius: 8px; border: 1px solid var(--border);">
+                        <div><strong>${slot.lessonNo}. Ders</strong> <span class="badge">${slot.time}</span></div>
+                        <div>
+                            <input type="text" class="slot-subject" data-time="${slot.time}" placeholder="Ders Adı" value="${existing.subject}">
+                        </div>
+                        <div>
+                            <input type="text" class="slot-class" data-time="${slot.time}" placeholder="Sınıf / Şube (Örn: 5/A)" value="${existing.cls}">
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateConfigDayView() {
+            generateTimeTableSlots();
+        }
+
+        // Günlük Programı Kaydetme
+        async function saveDaySchedule() {
+            const currentDay = document.getElementById('configDay').value;
+            
+            const existingIds = schedule.filter(s => s.day === currentDay).map(s => s.id);
+            if (existingIds.length > 0) {
+                await supabaseClient.from('schedule').delete().in('id', existingIds);
             }
 
-            document.getElementById('scheduleForm').reset();
+            const subjectInputs = document.querySelectorAll('.slot-subject');
+            const classInputs = document.querySelectorAll('.slot-class');
+
+            let newItems = [];
+            for (let i = 0; i < subjectInputs.length; i++) {
+                const sub = subjectInputs[i].value.trim();
+                const cls = classInputs[i].value.trim();
+                const time = subjectInputs[i].getAttribute('data-time');
+
+                if (sub !== '') {
+                    newItems.push({
+                        id: Date.now() + i,
+                        day: currentDay,
+                        time: time,
+                        subject: sub,
+                        cls: cls || 'Genel'
+                    });
+                }
+            }
+
+            if (newItems.length > 0) {
+                const { error } = await supabaseClient.from('schedule').insert(newItems);
+                if (error) {
+                    alert("Kayıt hatası: " + error.message);
+                    return;
+                }
+            }
+
+            alert(`${currentDay} günü programı başarıyla kaydedildi!`);
             fetchData();
         }
 
@@ -448,6 +580,7 @@
 
         function renderScheduleTable() {
             const tbody = document.getElementById('scheduleTableBody');
+            if (!tbody) return;
             if (schedule.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Kayıtlı ders bulunmuyor.</td></tr>`;
                 return;
@@ -463,14 +596,84 @@
             `).join('');
         }
 
-        // Plan Ekleme
+        // WORD DOSYASINDAN OTOMATİK PLAN YÜKLEME (YILLIK PLANLARI YÜKLE BUTONU)
+        async function handleWordUpload() {
+            const subject = document.getElementById('wordPlanSubject').value.trim();
+            const fileInput = document.getElementById('wordFileInput');
+            
+            if (!subject) {
+                alert("Lütfen önce ders adını girin.");
+                return;
+            }
+            if (fileInput.files.length === 0) {
+                alert("Lütfen bir Word (.docx) dosyası seçin.");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = async function(event) {
+                const arrayBuffer = event.target.result;
+
+                mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+                    .then(async function(result) {
+                        const text = result.value;
+                        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+                        let parsedPlans = [];
+                        let currentWeek = 1;
+
+                        lines.forEach((line) => {
+                            let weekMatch = line.match(/(\d+)\s*[\.\-]?\s*hafta/i);
+                            if (weekMatch) {
+                                let wNum = parseInt(weekMatch[1]);
+                                if (wNum >= 1 && wNum <= 41) {
+                                    currentWeek = wNum;
+                                }
+                            }
+
+                            if (line.length > 10 && !line.toLowerCase().includes('hafta')) {
+                                parsedPlans.push({
+                                    id: Date.now() + Math.random(),
+                                    subject: subject,
+                                    week: currentWeek,
+                                    outcome: line
+                                });
+                                if (currentWeek < 41) currentWeek++;
+                            }
+                        });
+
+                        if (parsedPlans.length === 0) {
+                            alert("Word dosyasından uygun plan metinleri okunamadı. Lütfen planı manuel ekleyin.");
+                            return;
+                        }
+
+                        const { error } = await supabaseClient.from('plans').insert(parsedPlans);
+                        if (error) {
+                            alert("Veritabanına kaydedilirken hata oluştu: " + error.message);
+                            return;
+                        }
+
+                        alert(`Başarıyla ${parsedPlans.length} adet yıllık plan maddesi yüklendi!`);
+                        fetchData();
+                    })
+                    .catch(function(err) {
+                        alert("Word dosyası okunurken hata oluştu: " + err);
+                    });
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Manuel Yıllık Plan Ekleme
         async function addPlanItem(e) {
             e.preventDefault();
             const newItem = {
                 id: Date.now(),
-                subject: document.getElementById('planSubject').value,
+                subject: document.getElementById('planSubject').value.trim(),
                 week: parseInt(document.getElementById('planWeek').value),
-                outcome: document.getElementById('planOutcome').value
+                outcome: document.getElementById('planOutcome').value.trim()
             };
 
             const { error } = await supabaseClient.from('plans').insert([newItem]);
@@ -494,6 +697,7 @@
 
         function renderPlanTable() {
             const tbody = document.getElementById('planTableBody');
+            if (!tbody) return;
             if (plans.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Kayıtlı yıllık plan bulunmuyor.</td></tr>`;
                 return;
@@ -508,36 +712,40 @@
             `).join('');
         }
 
-        // Günlük Görünüm Oluşturma
+        // GÜNLÜK GÖRÜNÜM: SINIF, ŞUBE VE ÖĞRENME ÇIKTISINI GÖSTERME
         function renderDailyLessons() {
             const day = document.getElementById('selectedDay').value;
             const week = parseInt(document.getElementById('selectedWeek').value);
             const container = document.getElementById('dailyLessonsList');
+            if (!container) return;
 
             const dayLessons = schedule.filter(item => item.day === day).sort((a,b) => a.time.localeCompare(b.time));
 
             if (dayLessons.length === 0) {
-                container.innerHTML = `<p style="color: var(--text-secondary); padding: 10px 0;">Bu gün için kayıtlı ders bulunmuyor.</p>`;
+                container.innerHTML = `<p style="color: var(--text-secondary); padding: 10px 0;">Bu gün için kayıtlı ders veya zamanlama bulunmuyor.</p>`;
                 return;
             }
 
             container.innerHTML = dayLessons.map(lesson => {
                 const plan = plans.find(p => p.subject.toLowerCase() === lesson.subject.toLowerCase() && p.week === week);
-                const outcomeText = plan ? plan.outcome : '<span style="color: var(--text-secondary); font-style: italic;">Bu hafta için henüz kazanım girilmemiş.</span>';
+                const outcomeText = plan 
+                    ? `<strong style="color: var(--primary);">${plan.outcome}</strong>` 
+                    : '<span style="color: var(--warning); font-style: italic;">Bu hafta için henüz yıllık plan/kazanım yüklenmemiş. Lütfen "Yıllık Planlar" sekmesinden Word dosyanızı yükleyin.</span>';
 
                 return `
-                    <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <strong>${lesson.time} - ${lesson.subject}</strong>
-                            <span class="badge">${lesson.cls}</span>
+                    <div style="border-bottom: 1px solid var(--border); padding: 14px 0;">
+                        <div style="display: flex; justify-content: space-link; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 1.05rem;"><strong>${lesson.time}</strong> — ${lesson.subject}</span>
+                            <span class="badge" style="font-size: 0.85rem; padding: 6px 10px;">Sınıf/Şube: ${lesson.cls}</span>
                         </div>
-                        <p style="font-size: 0.9rem; color: var(--text);"><strong>Kazanım:</strong> ${outcomeText}</p>
+                        <div style="background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
+                            <p style="font-size: 0.9rem; color: var(--text);"><strong>Öğrenme Çıktısı (Deftere Yazılacak):</strong><br>${outcomeText}</p>
+                        </div>
                     </div>
                 `;
             }).join('');
         }
 
-        // Bildirim İzni ve Kontrolü
         function requestNotificationPermission() {
             if ("Notification" in window) {
                 Notification.requestPermission().then(permission => {
@@ -552,28 +760,7 @@
             }
         }
 
-        setInterval(() => {
-            if (!("Notification" in window) || Notification.permission !== "granted") return;
-
-            const now = new Date();
-            const days = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
-            const currentDay = days[now.getDay()];
-            
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes() + 1).padStart(2, '0');
-            const currentTimeTarget = `${hours}:${minutes}`;
-
-            schedule.forEach(item => {
-                if (item.day === currentDay && item.time === currentTimeTarget) {
-                    new Notification("Ders Hatırlatıcısı", {
-                        body: `${item.subject} (${item.cls}) dersiniz 1 dakika sonra başlıyor!`,
-                        icon: "https://cdn-icons-png.flaticon.com/512/3233/3233483.png"
-                    });
-                }
-            });
-        }, 60000);
-
-        // Sayfa açıldığında verileri Supabase'den çek
+        // Başlangıçta verileri çek
         fetchData();
     </script>
 </body>
