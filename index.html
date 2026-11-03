@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sınıf Defterim & Yıllık Plan Yükleme</title>
-    <!-- Supabase Kütüphanesi -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Word (.docx) Dosyalarını Okumak İçin Mammoth.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <!-- Excel (.xlsx) Dosyalarını Okumak İçin SheetJS (xlsx) Kütüphanesi -->
@@ -119,6 +117,25 @@
         }
 
         .tab-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .sub-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 15px;
+        }
+
+        .sub-tab-btn {
+            background: var(--border);
+            color: var(--text);
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+
+        .sub-tab-btn.active {
             background: var(--primary);
             color: white;
         }
@@ -361,17 +378,17 @@
             <div class="card" style="border: 2px dashed var(--primary); background: var(--bg);">
                 <h3 style="color: var(--primary); margin-bottom: 8px;">📂 Word (.docx) veya Excel (.xlsx) Yıllık Plan Yükle</h3>
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">
-                    Hazırladığınız Excel (.xlsx) veya Word (.docx) plan dosyanızı seçin. Sistem otomatik olarak haftaları ve kazanımları okuyup veritabanına işleyecektir.
+                    Plan dosyanızı seçin. (Not: Farklı sınıflar yüklerken Ders Adına sınıf belirtebilirsiniz, örn: <em>Müzik 5</em>, <em>Müzik 6</em>).
                 </p>
                 <div class="form-group">
-                    <label>Ders Adı</label>
-                    <input type="text" id="filePlanSubject" placeholder="Örn: Müzik" required>
+                    <label>Ders Adı / Sınıf (Örn: Müzik 5, Müzik 6 vb.)</label>
+                    <input type="text" id="filePlanSubject" placeholder="Örn: Müzik 5" required>
                 </div>
                 <div class="form-group">
                     <label>Plan Dosyası Seç (.docx veya .xlsx)</label>
                     <input type="file" id="planFileInput" accept=".docx, .xlsx, .xls" style="padding: 8px; background: var(--card-bg);">
                 </div>
-                <button onclick="handleFileUpload()" style="width: 100%; padding: 12px; font-size: 1rem; margin-top: 5px;">Yıllık Planı Otomatik Yükle ve Kaydet</button>
+                <button onclick="handleFileUpload()" style="width: 100%; padding: 12px; font-size: 1rem; margin-top: 5px;">Yıllık Planı Ekle ve Kaydet</button>
             </div>
 
             <div class="card">
@@ -380,7 +397,7 @@
                     <div class="grid-2">
                         <div class="form-group">
                             <label>Ders Adı</label>
-                            <input type="text" id="planSubject" placeholder="Örn: Müzik" required>
+                            <input type="text" id="planSubject" placeholder="Örn: Müzik 5" required>
                         </div>
                         <div class="form-group">
                             <label>Hafta (1 - 41)</label>
@@ -396,11 +413,17 @@
             </div>
 
             <div class="card">
-                <h3>Yıllık Plan Kayıtları</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                    <h3>Yıllık Plan Kayıtları</h3>
+                    <!-- Sınıf / Ders Seçim Butonları -->
+                    <div class="sub-tabs" id="planFilterButtons">
+                        <button class="sub-tab-btn active" onclick="filterPlanTable('Tümü', event)">Tümü</button>
+                    </div>
+                </div>
                 <table id="planTable">
                     <thead>
                         <tr>
-                            <th>Ders</th>
+                            <th>Ders / Sınıf</th>
                             <th>Hafta</th>
                             <th>Öğrenme Çıktısı / Konu</th>
                             <th>İşlem</th>
@@ -415,14 +438,9 @@
     </div>
 
     <script>
-        // SUPABASE BİLGİLERİNİZ (Sabit tanımlama en üstte yapıldı)
-        const SUPABASE_URL = 'BURAYA_SUPABASE_URL_ADRESINIZI_YAZIN';
-        const SUPABASE_ANON_KEY = 'BURAYA_SUPABASE_ANON_KEY_DEGERINI_YAZIN';
-
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        let schedule = [];
-        let plans = [];
+        let schedule = JSON.parse(localStorage.getItem('sinif_defterim_schedule')) || [];
+        let plans = JSON.parse(localStorage.getItem('sinif_defterim_plans')) || [];
+        let currentPlanFilter = 'Tümü';
 
         // Tema Yönetimi
         function toggleTheme() {
@@ -447,22 +465,11 @@
             if (tabId === 'schedule') generateTimeTableSlots();
         }
 
-        // Verileri Supabase'den Çekme
-        async function fetchData() {
-            try {
-                const { data: schData, error: schError } = await supabaseClient.from('schedule').select('*');
-                if (!schError) schedule = schData || [];
-
-                const { data: planData, error: planError } = await supabaseClient.from('plans').select('*');
-                if (!planError) plans = planData || [];
-
-                renderScheduleTable();
-                renderPlanTable();
-                renderDailyLessons();
-                generateTimeTableSlots();
-            } catch (err) {
-                console.error("Veri çekme hatası:", err);
-            }
+        function refreshUI() {
+            renderScheduleTable();
+            renderPlanTable();
+            renderDailyLessons();
+            generateTimeTableSlots();
         }
 
         // Saat Hesaplama ve Arayüz Oluşturma
@@ -530,25 +537,20 @@
         }
 
         // Günlük Programı Kaydetme
-        async function saveDaySchedule() {
+        function saveDaySchedule() {
             const currentDay = document.getElementById('configDay').value;
-            
-            const existingIds = schedule.filter(s => s.day === currentDay).map(s => s.id);
-            if (existingIds.length > 0) {
-                await supabaseClient.from('schedule').delete().in('id', existingIds);
-            }
+            schedule = schedule.filter(s => s.day !== currentDay);
 
             const subjectInputs = document.querySelectorAll('.slot-subject');
             const classInputs = document.querySelectorAll('.slot-class');
 
-            let newItems = [];
             for (let i = 0; i < subjectInputs.length; i++) {
                 const sub = subjectInputs[i].value.trim();
                 const cls = classInputs[i].value.trim();
                 const time = subjectInputs[i].getAttribute('data-time');
 
                 if (sub !== '') {
-                    newItems.push({
+                    schedule.push({
                         id: Date.now() + i,
                         day: currentDay,
                         time: time,
@@ -558,25 +560,15 @@
                 }
             }
 
-            if (newItems.length > 0) {
-                const { error } = await supabaseClient.from('schedule').insert(newItems);
-                if (error) {
-                    alert("Kayıt hatası: " + error.message);
-                    return;
-                }
-            }
-
+            localStorage.setItem('sinif_defterim_schedule', JSON.stringify(schedule));
             alert(`${currentDay} günü programı başarıyla kaydedildi!`);
-            fetchData();
+            refreshUI();
         }
 
-        async function deleteScheduleItem(id) {
-            const { error } = await supabaseClient.from('schedule').delete().eq('id', id);
-            if (error) {
-                alert("Silme hatası: " + error.message);
-                return;
-            }
-            fetchData();
+        function deleteScheduleItem(id) {
+            schedule = schedule.filter(item => item.id !== id);
+            localStorage.setItem('sinif_defterim_schedule', JSON.stringify(schedule));
+            refreshUI();
         }
 
         function renderScheduleTable() {
@@ -598,12 +590,12 @@
         }
 
         // DOSYA YÜKLEME YÖNETİCİSİ (.docx ve .xlsx desteği)
-        async function handleFileUpload() {
+        function handleFileUpload() {
             const subject = document.getElementById('filePlanSubject').value.trim();
             const fileInput = document.getElementById('planFileInput');
             
             if (!subject) {
-                alert("Lütfen önce ders adını girin (Örn: Müzik).");
+                alert("Lütfen önce ders adını/sınıfı girin (Örn: Müzik 5).");
                 return;
             }
             if (fileInput.files.length === 0) {
@@ -626,10 +618,10 @@
         // Word Dosyası Okuma
         function handleWordUpload(file, subject) {
             const reader = new FileReader();
-            reader.onload = async function(event) {
+            reader.onload = function(event) {
                 const arrayBuffer = event.target.result;
                 mammoth.extractRawText({ arrayBuffer: arrayBuffer })
-                    .then(async function(result) {
+                    .then(function(result) {
                         const text = result.value;
                         const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
@@ -656,7 +648,7 @@
                             }
                         });
 
-                        await saveParsedPlans(parsedPlans);
+                        saveParsedPlans(parsedPlans);
                     })
                     .catch(function(err) {
                         alert("Word dosyası okunurken hata oluştu: " + err);
@@ -665,10 +657,10 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // Gelişmiş Excel Dosyası Okuma (.xlsx)
+        // Excel Dosyası Okuma (.xlsx)
         function handleExcelUpload(file, subject) {
             const reader = new FileReader();
-            reader.onload = async function(e) {
+            reader.onload = function(e) {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
@@ -714,7 +706,7 @@
                         });
                     });
 
-                    await saveParsedPlans(parsedPlans);
+                    saveParsedPlans(parsedPlans);
                 } catch (err) {
                     alert("Excel dosyası okunurken hata oluştu: " + err);
                 }
@@ -722,24 +714,20 @@
             reader.readAsArrayBuffer(file);
         }
 
-        async function saveParsedPlans(parsedPlans) {
+        function saveParsedPlans(parsedPlans) {
             if (parsedPlans.length === 0) {
                 alert("Excel veya Word dosyasından uygun plan maddeleri okunamadı.");
                 return;
             }
 
-            const { error } = await supabaseClient.from('plans').insert(parsedPlans);
-            if (error) {
-                alert("Veritabanına kaydedilirken hata oluştu: " + error.message);
-                return;
-            }
-
-            alert(`Başarıyla ${parsedPlans.length} adet yıllık plan maddesi yüklendi ve kaydedildi!`);
-            fetchData();
+            plans = plans.concat(parsedPlans);
+            localStorage.setItem('sinif_defterim_plans', JSON.stringify(plans));
+            alert(`Başarıyla ${parsedPlans.length} adet yıllık plan maddesi eklendi ve kaydedildi!`);
+            refreshUI();
         }
 
         // Manuel Yıllık Plan Ekleme
-        async function addPlanItem(e) {
+        function addPlanItem(e) {
             e.preventDefault();
             const newItem = {
                 id: Date.now(),
@@ -748,33 +736,52 @@
                 outcome: document.getElementById('planOutcome').value.trim()
             };
 
-            const { error } = await supabaseClient.from('plans').insert([newItem]);
-            if (error) {
-                alert("Plan eklenirken hata oluştu: " + error.message);
-                return;
-            }
-
+            plans.push(newItem);
+            localStorage.setItem('sinif_defterim_plans', JSON.stringify(plans));
             document.getElementById('plannerForm').reset();
-            fetchData();
+            refreshUI();
         }
 
-        async function deletePlanItem(id) {
-            const { error } = await supabaseClient.from('plans').delete().eq('id', id);
-            if (error) {
-                alert("Silme hatası: " + error.message);
-                return;
-            }
-            fetchData();
+        function deletePlanItem(id) {
+            plans = plans.filter(item => item.id !== id);
+            localStorage.setItem('sinif_defterim_plans', JSON.stringify(plans));
+            refreshUI();
+        }
+
+        function filterPlanTable(subjectName, event) {
+            currentPlanFilter = subjectName;
+            document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
+            if (event) event.currentTarget.classList.add('active');
+            renderPlanTable();
         }
 
         function renderPlanTable() {
+            const filterContainer = document.getElementById('planFilterButtons');
             const tbody = document.getElementById('planTableBody');
-            if (!tbody) return;
-            if (plans.length === 0) {
+            if (!tbody || !filterContainer) return;
+
+            // Benzersiz ders/sınıf adlarını bul
+            const uniqueSubjects = [...new Set(plans.map(p => p.subject))];
+
+            // Filtre butonlarını dinamik olarak oluştur
+            filterContainer.innerHTML = `
+                <button class="sub-tab-btn ${currentPlanFilter === 'Tümü' ? 'active' : ''}" onclick="filterPlanTable('Tümü', event)">Tümü</button>
+                ${uniqueSubjects.map(sub => `
+                    <button class="sub-tab-btn ${currentPlanFilter === sub ? 'active' : ''}" onclick="filterPlanTable('${sub}', event)">${sub}</button>
+                `).join('')}
+            `;
+
+            // Filtrelemeyi uygula
+            const filteredPlans = currentPlanFilter === 'Tümü' 
+                ? plans 
+                : plans.filter(p => p.subject === currentPlanFilter);
+
+            if (filteredPlans.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Kayıtlı yıllık plan bulunmuyor.</td></tr>`;
                 return;
             }
-            tbody.innerHTML = plans.map(item => `
+
+            tbody.innerHTML = filteredPlans.map(item => `
                 <tr>
                     <td>${item.subject}</td>
                     <td><span class="badge">${item.week}. Hafta</span></td>
@@ -832,8 +839,8 @@
             }
         }
 
-        // Başlangıçta verileri çek
-        fetchData();
+        // Sayfa açıldığında arayüzü doldur
+        refreshUI();
     </script>
 </body>
 </html>
