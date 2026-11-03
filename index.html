@@ -6,8 +6,10 @@
     <title>Sınıf Defterim & Yıllık Plan Yükleme</title>
     <!-- Supabase Kütüphanesi -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Word (.docx) Dosyalarını Okumak İçin Mammoth.js Kütüphanesi -->
+    <!-- Word (.docx) Dosyalarını Okumak İçin Mammoth.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- Excel (.xlsx) Dosyalarını Okumak İçin SheetJS (xlsx) Kütüphanesi -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
             --primary: #4f46e5;
@@ -244,7 +246,7 @@
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('daily', event)">Günlük Görünüm (Defter)</button>
             <button class="tab-btn" onclick="switchTab('schedule', event)">Zamanlama ve Ders Programı</button>
-            <button class="tab-btn" onclick="switchTab('planner', event)">Yıllık Planlar (Word Yükle)</button>
+            <button class="tab-btn" onclick="switchTab('planner', event)">Yıllık Planlar (Dosya Yükle)</button>
         </div>
 
         <!-- GÜNLÜK GÖRÜNÜM (DEFTER YAZIMI İÇİN) -->
@@ -354,23 +356,22 @@
             </div>
         </div>
 
-        <!-- YILLIK PLANLAR (WORD DOSYASINDAN YÜKLEME) -->
+        <!-- YILLIK PLANLAR (WORD VE EXCEL DOSYASINDAN YÜKLEME) -->
         <div id="planner" class="tab-content">
             <div class="card" style="border: 2px dashed var(--primary); background: var(--bg);">
-                <h3 style="color: var(--primary); margin-bottom: 8px;">📂 Word Dosyasından (.docx) Yıllık Plan Yükle</h3>
+                <h3 style="color: var(--primary); margin-bottom: 8px;">📂 Word (.docx) veya Excel (.xlsx) Yıllık Plan Yükle</h3>
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">
-                    Yıllık plan Word dosyanızı buradan seçin. Sistem dosyadaki kazanım ve konuları otomatik olarak okuyup ilgili haftalara işleyecektir.
+                    Hazırladığınız Excel (.xlsx) veya Word (.docx) plan dosyanızı seçin. Sistem otomatik olarak haftaları ve kazanımları okuyup veritabanına işleyecektir.
                 </p>
                 <div class="form-group">
                     <label>Ders Adı</label>
-                    <input type="text" id="wordPlanSubject" placeholder="Örn: Matematik" required>
+                    <input type="text" id="filePlanSubject" placeholder="Örn: Müzik" required>
                 </div>
                 <div class="form-group">
-                    <label>Word Dosyası Seç (.docx)</label>
-                    <input type="file" id="wordFileInput" accept=".docx" style="padding: 8px; background: var(--card-bg);">
+                    <label>Plan Dosyası Seç (.docx veya .xlsx)</label>
+                    <input type="file" id="planFileInput" accept=".docx, .xlsx, .xls" style="padding: 8px; background: var(--card-bg);">
                 </div>
-                <!-- İSTEDİĞİNİZ YILLIK PLANLARI YÜKLE BUTONU -->
-                <button onclick="handleWordUpload()" style="width: 100%; padding: 12px; font-size: 1rem; margin-top: 5px;">Yıllık Planları Yükle</button>
+                <button onclick="handleFileUpload()" style="width: 100%; padding: 12px; font-size: 1rem; margin-top: 5px;">Yıllık Planı Otomatik Yükle ve Kaydet</button>
             </div>
 
             <div class="card">
@@ -379,7 +380,7 @@
                     <div class="grid-2">
                         <div class="form-group">
                             <label>Ders Adı</label>
-                            <input type="text" id="planSubject" placeholder="Örn: Türkçe" required>
+                            <input type="text" id="planSubject" placeholder="Örn: Müzik" required>
                         </div>
                         <div class="form-group">
                             <label>Hafta (1 - 41)</label>
@@ -414,7 +415,7 @@
     </div>
 
     <script>
-        // SUPABASE BİLGİLERİNİZ (Kendi projenizin URL ve Anon Key bilgilerini buraya yazın)
+        // SUPABASE BİLGİLERİNİZ (Sabit tanımlama en üstte yapıldı)
         const SUPABASE_URL = 'BURAYA_SUPABASE_URL_ADRESINIZI_YAZIN';
         const SUPABASE_ANON_KEY = 'BURAYA_SUPABASE_ANON_KEY_DEGERINI_YAZIN';
 
@@ -596,26 +597,37 @@
             `).join('');
         }
 
-        // WORD DOSYASINDAN OTOMATİK PLAN YÜKLEME (YILLIK PLANLARI YÜKLE BUTONU)
-        async function handleWordUpload() {
-            const subject = document.getElementById('wordPlanSubject').value.trim();
-            const fileInput = document.getElementById('wordFileInput');
+        // DOSYA YÜKLEME YÖNETİCİSİ (.docx ve .xlsx desteği)
+        async function handleFileUpload() {
+            const subject = document.getElementById('filePlanSubject').value.trim();
+            const fileInput = document.getElementById('planFileInput');
             
             if (!subject) {
-                alert("Lütfen önce ders adını girin.");
+                alert("Lütfen önce ders adını girin (Örn: Müzik).");
                 return;
             }
             if (fileInput.files.length === 0) {
-                alert("Lütfen bir Word (.docx) dosyası seçin.");
+                alert("Lütfen bir dosya (.docx veya .xlsx) seçin.");
                 return;
             }
 
             const file = fileInput.files[0];
-            const reader = new FileReader();
+            const fileName = file.name.toLowerCase();
 
+            if (fileName.endsWith('.docx')) {
+                handleWordUpload(file, subject);
+            } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                handleExcelUpload(file, subject);
+            } else {
+                alert("Lütfen geçerli bir .docx veya .xlsx uzantılı dosya seçin.");
+            }
+        }
+
+        // Word Dosyası Okuma
+        function handleWordUpload(file, subject) {
+            const reader = new FileReader();
             reader.onload = async function(event) {
                 const arrayBuffer = event.target.result;
-
                 mammoth.extractRawText({ arrayBuffer: arrayBuffer })
                     .then(async function(result) {
                         const text = result.value;
@@ -644,26 +656,86 @@
                             }
                         });
 
-                        if (parsedPlans.length === 0) {
-                            alert("Word dosyasından uygun plan metinleri okunamadı. Lütfen planı manuel ekleyin.");
-                            return;
-                        }
-
-                        const { error } = await supabaseClient.from('plans').insert(parsedPlans);
-                        if (error) {
-                            alert("Veritabanına kaydedilirken hata oluştu: " + error.message);
-                            return;
-                        }
-
-                        alert(`Başarıyla ${parsedPlans.length} adet yıllık plan maddesi yüklendi!`);
-                        fetchData();
+                        await saveParsedPlans(parsedPlans);
                     })
                     .catch(function(err) {
                         alert("Word dosyası okunurken hata oluştu: " + err);
                     });
             };
-
             reader.readAsArrayBuffer(file);
+        }
+
+        // Gelişmiş Excel Dosyası Okuma (.xlsx)
+        function handleExcelUpload(file, subject) {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    let parsedPlans = [];
+                    
+                    workbook.SheetNames.forEach(sheetName => {
+                        const sheet = workbook.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                        rows.forEach((row, idx) => {
+                            if (idx === 0) return; // Başlık satırını atla
+
+                            let weekNum = 1;
+                            let outcomeText = "";
+
+                            row.forEach((cellVal) => {
+                                let cellStr = String(cellVal || "").trim();
+                                
+                                let weekMatch = cellStr.match(/(\d+)\s*[\.\-]?\s*hafta/i);
+                                if (weekMatch) {
+                                    let w = parseInt(weekMatch[1]);
+                                    if (w >= 1 && w <= 41) weekNum = w;
+                                }
+
+                                if (cellStr.length > 10 && !cellStr.toLowerCase().includes('hafta') && !cellStr.match(/^\d+$/)) {
+                                    if (!outcomeText) {
+                                        outcomeText = cellStr;
+                                    } else {
+                                        outcomeText += " - " + cellStr;
+                                    }
+                                }
+                            });
+
+                            if (outcomeText) {
+                                parsedPlans.push({
+                                    id: Date.now() + Math.random(),
+                                    subject: subject,
+                                    week: weekNum,
+                                    outcome: outcomeText
+                                });
+                            }
+                        });
+                    });
+
+                    await saveParsedPlans(parsedPlans);
+                } catch (err) {
+                    alert("Excel dosyası okunurken hata oluştu: " + err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function saveParsedPlans(parsedPlans) {
+            if (parsedPlans.length === 0) {
+                alert("Excel veya Word dosyasından uygun plan maddeleri okunamadı.");
+                return;
+            }
+
+            const { error } = await supabaseClient.from('plans').insert(parsedPlans);
+            if (error) {
+                alert("Veritabanına kaydedilirken hata oluştu: " + error.message);
+                return;
+            }
+
+            alert(`Başarıyla ${parsedPlans.length} adet yıllık plan maddesi yüklendi ve kaydedildi!`);
+            fetchData();
         }
 
         // Manuel Yıllık Plan Ekleme
@@ -730,11 +802,11 @@
                 const plan = plans.find(p => p.subject.toLowerCase() === lesson.subject.toLowerCase() && p.week === week);
                 const outcomeText = plan 
                     ? `<strong style="color: var(--primary);">${plan.outcome}</strong>` 
-                    : '<span style="color: var(--warning); font-style: italic;">Bu hafta için henüz yıllık plan/kazanım yüklenmemiş. Lütfen "Yıllık Planlar" sekmesinden Word dosyanızı yükleyin.</span>';
+                    : '<span style="color: var(--warning); font-style: italic;">Bu hafta için henüz yıllık plan/kazanım yüklenmemiş. Lütfen "Yıllık Planlar" sekmesinden dosyanızı yükleyin.</span>';
 
                 return `
                     <div style="border-bottom: 1px solid var(--border); padding: 14px 0;">
-                        <div style="display: flex; justify-content: space-link; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 1.05rem;"><strong>${lesson.time}</strong> — ${lesson.subject}</span>
                             <span class="badge" style="font-size: 0.85rem; padding: 6px 10px;">Sınıf/Şube: ${lesson.cls}</span>
                         </div>
